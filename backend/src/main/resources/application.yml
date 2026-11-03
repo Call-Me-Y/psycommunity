@@ -1,0 +1,42 @@
+server:
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
+
+spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
+  application:
+    name: psycommunity-api
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./psycommunity;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  servlet:
+    multipart:
+      max-file-size: 16MB
+      max-request-size: 16MB
+
+app:
+  emotion:
+    enabled: ${EMOTION_MODEL_ENABLED:false}
+    model-path: ${EMOTION_MODEL_PATH:./models/emotion}
+    alert-threshold: ${EMOTION_ALERT_THRESHOLD:0.80}
+  agent:
+    api-url: ${AGENT_API_URL:}
+    api-key: ${AGENT_API_KEY:}
+    model: ${AGENT_MODEL:}
+  jwt:
+    # The fallback is for local development. Set JWT_SECRET to a random value for deployments.
+    secret: ${JWT_SECRET:local-development-secret-change-this-before-deployment-2026}
+    ttl: ${JWT_TTL:7d}
+  upload-dir: ${UPLOAD_DIR:./data/uploads}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

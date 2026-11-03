@@ -1,0 +1,174 @@
+{
+	"pages": [
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "放青松 - 登录"
+			}
+		},
+
+		{
+			"path": "pages/community/index",
+			"style": {
+				"navigationBarTitleText": "社区",
+				"enablePullDownRefresh": true,
+				"backgroundTextStyle": "dark"
+			}
+		},
+		{
+			"path": "pages/chat/index",
+			"style": {
+				"navigationBarTitleText": "通讯",
+				"enablePullDownRefresh": true,
+				"backgroundTextStyle": "dark"
+			}
+		},
+		{
+			"path": "pages/chat/agent",
+			"style": { "navigationBarTitleText": "AI 对话", "navigationStyle": "custom" }
+		},
+		{
+			"path": "pages/chat/notifications",
+			"style": { "navigationBarTitleText": "管理员通知", "navigationStyle": "custom" }
+		},
+		{
+			"path": "pages/resources/index",
+			"style": {
+				"navigationBarTitleText": "测评",
+				"enablePullDownRefresh": true,
+				"backgroundTextStyle": "dark"
+			}
+		},
+		{
+			"path": "pages/profile/index",
+			"style": {
+				"navigationBarTitleText": "个人"
+			}
+		},
+		{
+			"path": "pages/profile/settings",
+			"style": {
+				"navigationBarTitleText": "设置"
+			}
+		},
+		{
+			"path": "pages/community/searchPost",
+			"style": { "navigationBarTitleText": "搜索动态" }
+		  },
+		  {
+			"path": "pages/community/manage",
+			"style": { "navigationBarTitleText": "发布管理" }
+		  },
+		  
+		  {
+			"path": "pages/community/createPost",
+			"style": { "navigationBarTitleText": "发布动态" }
+		  },
+		  {
+			"path": "pages/community/postDetail",
+			"style": { "navigationBarTitleText": "动态详情" }
+		  },
+		  {
+			"path": "pages/profile/accounts",
+			"style": { "navigationBarTitleText": "账号管理" }
+		  },
+		  {
+			"path": "pages/chat/private",
+			"style": { 
+				"navigationBarTitleText": "私聊",
+				"navigationStyle": "custom"
+			}
+		  },
+		  {
+			"path": "pages/chat/group",
+			"style": { 
+				"navigationBarTitleText": "群聊",
+				"navigationStyle": "custom"
+			}
+		  },
+		  {
+			"path": "pages/group/members",
+			"style": { 
+				"navigationBarTitleText": "群成员"
+			}
+		  },
+		  {
+			"path": "pages/personalSpace/index",
+			"style": { 
+				"navigationBarTitleText": "个人空间"
+			}
+		  },
+		  {
+			"path": "pages/profile/changePassword",
+			"style": { 
+				"navigationBarTitleText": "修改密码"
+			}
+		  },
+		  {
+			"path": "pages/survey/create",
+			"style": { 
+				"navigationBarTitleText": "创建测评",
+				"navigationStyle": "custom"
+			}
+		  },
+		  {
+			"path": "pages/survey/detail",
+			"style": { 
+				"navigationBarTitleText": "测评填写",
+				"navigationStyle": "custom"
+			}
+		  },
+		  {
+			"path": "pages/survey/index",
+			"style": { 
+				"navigationBarTitleText": "统计结果",
+				"navigationStyle": "custom",
+				"enablePullDownRefresh": true,
+				"backgroundTextStyle": "dark"
+			}
+		  }
+	],
+	"tabBar": {
+		"color": "#ffffff",
+		"selectedColor": "#000000",
+		"borderStyle": "white",
+		"backgroundColor": "rgb(126, 220, 186)",
+		"list": [
+			{
+			  "pagePath": "pages/community/index",
+			  "iconPath": "static/tabbar/building.PNG",
+			  "text": "社区"
+			},
+			{
+			  "pagePath": "pages/chat/index",
+			  "iconPath": "static/tabbar/chat.PNG",
+			  "text": "通讯"
+			},
+			{
+			  "pagePath": "pages/resources/index",
+			  "iconPath": "static/tabbar/list.PNG",
+			  "text": "测评"
+			},
+			{
+				"pagePath": "pages/survey/index",
+				"iconPath": "static/tabbar/canlendar.PNG",
+				"text": "统计"
+			  },
+			{
+			  "pagePath": "pages/profile/index",
+			  "iconPath": "static/tabbar/user.PNG",
+			  "text": "个人"
+			}
+		  ]
+		},
+	"globalStyle": {
+		"backgroundColor": "#F8F8F8",
+		"navigationStyle": "custom",
+		"app-plus": {
+			"scrollIndicator": "none"
+		},
+		"h5": {
+			"scrollIndicator": "none"
+		}
+	}
+}
