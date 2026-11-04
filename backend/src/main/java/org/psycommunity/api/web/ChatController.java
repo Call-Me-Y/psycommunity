@@ -27,9 +27,12 @@ public class ChatController {
     private final UserAccountRepository users;
     private final UserProfileRepository profiles;
     private final EmotionService emotion;
+    private final MessageWebSocketHandler messageSocket;
 
-    public ChatController(JdbcTemplate db, AuthService auth, UserAccountRepository users, UserProfileRepository profiles, EmotionService emotion) {
+    public ChatController(JdbcTemplate db, AuthService auth, UserAccountRepository users, UserProfileRepository profiles,
+                          EmotionService emotion, MessageWebSocketHandler messageSocket) {
         this.db=db; this.auth=auth; this.users=users; this.profiles=profiles; this.emotion=emotion;
+        this.messageSocket=messageSocket;
     }
 
     @PostConstruct
@@ -161,6 +164,7 @@ public class ChatController {
         int msgType=(int)longValue(input.getOrDefault("msg_type",0));
         long id=insert("INSERT INTO psy_messages(sender_uid,receiver_uid,gid,content,msg_type,link,sent_time) VALUES (?,?,?,?,?,?,?)",user.getUid(),receiver,gid,content,msgType,str(input.get("link")),Instant.now().toString());
         if(msgType==0) emotion.submit(user.getUid(),"chat",id,content);
+        messageSocket.publishAfterCommit(id);
         return body("success",true,"id",id,"message_id",id);
     }
 

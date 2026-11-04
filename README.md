@@ -117,7 +117,7 @@ npm ci
 npm run build:h5
 ```
 
-H5 文件位于 `frontend/dist/build/h5/`。部署时将该目录交给 Web 服务器，并把 `/api/` 和 `/uploads/` 反向代理到 Java 服务；容器部署使用的配置可参考 `frontend/nginx.conf`。在同一域名下访问可使用默认 `/api` 地址。
+H5 文件位于 `frontend/dist/build/h5/`。部署时将该目录交给 Web 服务器，并把 `/api/`、`/uploads/` 和 `/ws/` 反向代理到 Java 服务；容器部署使用的配置可参考 `frontend/nginx.conf`。在同一域名下访问可使用默认 `/api` 地址。
 
 ### uni-app 打包与发布
 
@@ -137,9 +137,9 @@ npm ci
 
 #### 1. 设置客户端连接地址
 
-H5、App 和小程序都要访问已运行的 Java 后端。Docker Compose 默认由前端的 `8088` 端口转发 `/api/` 和 `/uploads/`；若使用自己的域名，应让反向代理提供相同路径。后端、PostgreSQL、本地情感模型和外部对话服务配置都**不会打进 App 或小程序**，需要单独部署。
+H5、App 和小程序都要访问已运行的 Java 后端。Docker Compose 默认由前端的 `8088` 端口转发 `/api/`、`/uploads/` 和 `/ws/`；若使用自己的域名，应让反向代理提供相同路径。后端、PostgreSQL、本地情感模型和外部对话服务配置都**不会打进 App 或小程序**，需要单独部署。
 
-H5 与后端同域时可保留默认的 `VITE_API_BASE_URL=/api`。App 和小程序需要配置手机或小程序运行环境可访问的完整服务地址；`localhost` 或 `127.0.0.1` 指设备自身，并非部署服务器。测试机可按平台网络策略使用可达的局域网地址；正式部署应使用已配置 HTTPS 的域名。
+H5 与后端同域时可保留默认的 `VITE_API_BASE_URL=/api`，前端会通过当前站点连接 `/ws/chat`。App 和小程序需要配置手机或小程序运行环境可访问的完整服务地址；客户端会根据 `VITE_API_BASE_URL` 自动推导 WebSocket 地址。`localhost` 或 `127.0.0.1` 指设备自身，并非部署服务器。测试机可按平台网络策略使用可达的局域网地址；正式部署应使用已配置 HTTPS/WSS 的域名，并在平台后台配置相应的 WebSocket 合法域名。
 
 在 `frontend` 目录复制配置文件，再填写自己的地址：
 
@@ -159,15 +159,18 @@ notepad .env.production.local
 VITE_API_BASE_URL=https://community.example.com/api
 VITE_STATIC_BASE_URL=https://community.example.com
 VITE_FRONTEND_BASE_URL=https://community.example.com
+# 可选：未设置时从 API 地址或当前 H5 站点自动推导
+# VITE_WS_BASE_URL=wss://community.example.com/ws/chat
 ```
 
-- `VITE_API_BASE_URL` 是接口前缀；`VITE_STATIC_BASE_URL` 是访问上传图片等文件的站点根地址；`VITE_FRONTEND_BASE_URL` 用于生成站点分享链接。
+- `VITE_API_BASE_URL` 是接口前缀；`VITE_STATIC_BASE_URL` 是访问上传图片等文件的站点根地址；`VITE_FRONTEND_BASE_URL` 用于生成站点分享链接；`VITE_WS_BASE_URL` 可选，用于覆盖实时消息 WebSocket 地址。
+- 实时消息连接地址为 `/ws/chat`。连接后客户端以首帧提交登录令牌，服务端只向私聊接收人或当前群成员推送消息；消息发送仍使用现有 HTTP API，WebSocket 断线重连后会增量补拉离线消息。自定义反向代理时需开启 WebSocket Upgrade 转发，并允许配置中的前端来源。
 - 这些值在**构建时**写入客户端，更改后必须重新构建并重新发布。客户端配置不保密，外部模型 API 密钥和数据库密码只放在服务端的根目录 `.env`，不要放进前端配置或安装包。
 - 前端的 `.env.production.local` 与仓库根目录供 Docker Compose 使用的 `.env` 是两个不同的文件，前者已被 Git 忽略。Vite 开发服务器的 `API_PROXY_TARGET` 只影响开发代理：直接运行 Java 时通常是 `http://localhost:8080`；使用默认 Compose 端口时可在 `frontend/.env.local` 中设为 `http://localhost:8088`。
 - Compose 构建 H5 时，`frontend/Dockerfile` 的构建参数会设置前端环境变量；默认使用同域的 `/api`。如确实需要为 Docker 中的 H5 使用不同的公开地址，从仓库根目录重新构建：
 
   ```sh
-  docker compose build --build-arg VITE_API_BASE_URL=https://community.example.com/api --build-arg VITE_STATIC_BASE_URL=https://community.example.com --build-arg VITE_FRONTEND_BASE_URL=https://community.example.com frontend
+  docker compose build --build-arg VITE_API_BASE_URL=https://community.example.com/api --build-arg VITE_STATIC_BASE_URL=https://community.example.com --build-arg VITE_FRONTEND_BASE_URL=https://community.example.com --build-arg VITE_WS_BASE_URL=wss://community.example.com/ws/chat frontend
   docker compose up -d --no-build frontend
   ```
 
@@ -180,7 +183,7 @@ VITE_FRONTEND_BASE_URL=https://community.example.com
 npm run build:h5
 ```
 
-将 `dist/build/h5/` 的内容部署到 Web 服务器，配置 `/api/` 和 `/uploads/` 反向代理到 Java 服务；本仓库可参考 `frontend/nginx.conf`。项目当前 H5 路由使用 `hash` 模式，默认部署在网站根路径。也可以按上文使用 Docker Compose 构建和启动 H5。
+将 `dist/build/h5/` 的内容部署到 Web 服务器，配置 `/api/`、`/uploads/` 和 `/ws/` 反向代理到 Java 服务；本仓库可参考 `frontend/nginx.conf`。项目当前 H5 路由使用 `hash` 模式，默认部署在网站根路径。也可以按上文使用 Docker Compose 构建和启动 H5。
 
 #### 3. 打包 Android / iOS App
 
@@ -218,6 +221,7 @@ npm run build:h5
 | `VITE_API_BASE_URL` | uni-app API 前缀 | `/api` |
 | `VITE_STATIC_BASE_URL` | 用户上传文件的访问地址前缀 | 自动使用当前站点 |
 | `VITE_FRONTEND_BASE_URL` | 分享链接使用的站点地址 | 空值，使用相对链接 |
+| `VITE_WS_BASE_URL` | 实时消息 WebSocket 地址 | 根据 API 地址或当前 H5 站点自动推导 |
 | `API_PROXY_TARGET` | H5 开发代理目标 | `http://localhost:8080` |
 | `JWT_SECRET` | 登录令牌签名密钥 | 仅本地开发有默认值 |
 | `UPLOAD_DIR` | 后端上传文件目录 | `./data/uploads` |
@@ -262,10 +266,12 @@ EMOTION_ALERT_THRESHOLD=0.80
 在本机下载模型时，可指定现有目录，例如 Windows 的 `C:/Projects/AI/models/erlanger-sentiment-onnx`，并将同一路径写入 `EMOTION_MODEL_PATH`：
 
 ```sh
-python backend/scripts/download_emotion_model.py --output ./models/emotion
+cd backend
+javac -d target/model-downloader scripts/DownloadEmotionModel.java
+java -cp target/model-downloader DownloadEmotionModel --output ../models/emotion
 ```
 
-下载脚本需要 Python 3，固定模型版本并校验文件；模型文件不进入 Git，项目运行本身不依赖 Python。Docker Compose 会把配置的宿主机目录只读挂载到后端容器。直接在宿主机运行后端时，程序会从项目根目录的 `.env` 读取这些配置；也可以通过同名环境变量覆盖。
+下载工具使用 JDK 17，无需额外 Java 依赖；它固定模型版本、校验文件并拒绝覆盖校验失败的已有文件。模型文件不进入 Git。Docker Compose 会把配置的宿主机目录只读挂载到后端容器。直接在宿主机运行后端时，程序会从项目根目录的 `.env` 读取这些配置；也可以通过同名环境变量覆盖。
 
 下载源是 [ONNX 转换模型](https://huggingface.co/onnx-community/Erlangshen-Roberta-110M-Sentiment-ONNX)。[原始模型](https://huggingface.co/IDEA-CCNL/Erlangshen-Roberta-110M-Sentiment)的模型卡标注 Apache-2.0；转换仓库未提供模型卡，使用或再次分发转换文件前应确认适用授权。项目自身的 MIT 许可不自动覆盖模型或原前端素材。
 

@@ -4,20 +4,17 @@ import config from '../config/api.js'
  * 负责处理后台消息获取、通知推送等功能
  */
 import Database from './database.js'
-import ChatCache from './chatCache.js'
 import localNotification from './localNotification.js'
-import messagePoller from './messagePoller.js'
+import messageSocket from './messageSocket.js'
 
 class BackgroundService {
   constructor() {
     this.isRunning = false
-    this.intervalId = null
-    this.checkInterval = 15000 // 15秒检查一次，提高响应速度
     this.lastCheckTime = null
     this.currentUser = null
     this.notificationEnabled = false
     this.backgroundTaskId = null
-    this.isChecking = false // 防止重复检查
+    this.messageCallback = null
   }
 
   /**
@@ -36,8 +33,8 @@ class BackgroundService {
       // 获取当前用户信息
       await this.getCurrentUser()
       
-      // 设置消息轮询回调
-      this.setupMessagePoller()
+      // 设置 WebSocket 消息回调
+      this.setupMessageSocket()
       
       // 启动后台任务
       this.startBackgroundTask()
@@ -62,14 +59,16 @@ class BackgroundService {
   }
 
   /**
-   * 设置消息轮询回调
+   * 设置实时消息回调
    */
-  setupMessagePoller() {
-    messagePoller.addCallback((data) => {
+  setupMessageSocket() {
+    if (this.messageCallback) messageSocket.removeCallback(this.messageCallback)
+    this.messageCallback = (data) => {
       if (data.type === 'newMessages') {
         this.handleNewMessages(data.messages)
       }
-    })
+    }
+    messageSocket.addCallback(this.messageCallback)
   }
 
   /**
@@ -82,10 +81,23 @@ class BackgroundService {
         this.currentUser = userRes.user
       } else {
         console.log('用户未登录，停止后台服务')
+        this.currentUser = null
         this.stopBackgroundTask()
       }
     } catch (error) {
       console.error('获取用户信息失败:', error)
+      this.currentUser = null
+      this.stopBackgroundTask()
+    }
+  }
+
+  async refreshCurrentUser() {
+    await this.getCurrentUser()
+    if (this.currentUser) {
+      this.setupMessageSocket()
+      this.startBackgroundTask()
+    } else {
+      this.stopBackgroundTask()
     }
   }
 
@@ -93,29 +105,14 @@ class BackgroundService {
    * 启动后台任务
    */
   startBackgroundTask() {
-    if (this.isRunning) {
-      console.log('后台任务已在运行中')
-      return
-    }
-
     if (!this.currentUser) {
       console.log('用户未登录，无法启动后台任务')
       return
     }
 
     this.isRunning = true
-    console.log('启动后台消息检查任务，间隔:', this.checkInterval / 1000, '秒')
-
-    // 启动消息轮询服务
-    messagePoller.start(this.currentUser)
-
-    // 立即执行一次检查
-    this.checkNewMessages()
-
-    // 设置定时检查
-    this.intervalId = setInterval(() => {
-      this.checkNewMessages()
-    }, this.checkInterval)
+    console.log('启动 WebSocket 实时消息服务')
+    messageSocket.start(this.currentUser)
 
     // #ifdef APP-PLUS
     // 注册后台任务
@@ -127,13 +124,7 @@ class BackgroundService {
    * 停止后台任务
    */
   stopBackgroundTask() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId)
-      this.intervalId = null
-    }
-    
-    // 停止消息轮询服务
-    messagePoller.stop()
+    messageSocket.stop()
     
     this.isRunning = false
     console.log('后台任务已停止')
@@ -148,57 +139,9 @@ class BackgroundService {
    * 检查新消息
    */
   async checkNewMessages() {
-    if (!this.currentUser) {
-      return
-    }
-
-    // 防止重复检查
-    if (this.isChecking) {
-      console.log('正在检查消息中，跳过本次请求')
-      return
-    }
-
-    this.isChecking = true
-
-    try {
-      console.log('检查新消息...')
-      
-      // 获取最新消息
-      const messagesRes = await Database.getLatestMessages()
-      if (!messagesRes.success) {
-        console.log('获取消息失败:', messagesRes.message)
-        return
-      }
-
-      // 获取缓存中的消息
-      const cachedMessages = ChatCache.getLatestMessagesCache() || []
-      const cachedMessageIds = new Set(cachedMessages.map(msg => msg.id))
-
-      // 找出新消息
-      const newMessages = messagesRes.messages.filter(msg => 
-        !cachedMessageIds.has(msg.id) && 
-        msg.sender_uid !== this.currentUser.uid // 排除自己发送的消息
-      )
-
-      if (newMessages.length > 0) {
-        console.log('发现', newMessages.length, '条新消息')
-        
-        // 使用增量更新方式合并消息
-        ChatCache.mergeMessagesToCache(messagesRes.messages)
-        
-        // 发送通知
-        await this.sendNotifications(newMessages)
-        
-        // 触发页面更新事件
-        this.triggerMessageUpdateEvent(newMessages)
-      }
-
-      this.lastCheckTime = new Date()
-    } catch (error) {
-      console.error('检查新消息失败:', error)
-    } finally {
-      this.isChecking = false
-    }
+    if (!this.currentUser) return
+    await messageSocket.manualSync()
+    this.lastCheckTime = new Date()
   }
 
   /**
@@ -210,12 +153,13 @@ class BackgroundService {
     }
 
     console.log('处理新消息:', messages.length, '条')
-
-    // 发送通知
-    await this.sendNotifications(messages)
+    this.lastCheckTime = new Date()
 
     // 触发页面更新事件
     this.triggerMessageUpdateEvent(messages)
+
+    // 本地通知可能涉及平台异步 API，放在页面事件之后执行。
+    await this.sendNotifications(messages)
   }
 
   /**
@@ -366,23 +310,11 @@ class BackgroundService {
   }
 
   /**
-   * 设置检查间隔
-   */
-  setCheckInterval(interval) {
-    this.checkInterval = interval
-    if (this.isRunning) {
-      this.stopBackgroundTask()
-      this.startBackgroundTask()
-    }
-  }
-
-  /**
    * 获取服务状态
    */
   getStatus() {
     return {
       isRunning: this.isRunning,
-      checkInterval: this.checkInterval,
       lastCheckTime: this.lastCheckTime,
       notificationEnabled: this.notificationEnabled,
       currentUser: this.currentUser ? this.currentUser.uid : null

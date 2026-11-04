@@ -2,6 +2,7 @@ package org.psycommunity.api.service;
 
 import org.psycommunity.api.domain.UserAccount;
 import org.psycommunity.api.repository.UserAccountRepository;
+import org.psycommunity.api.web.MessageWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -21,9 +22,11 @@ public class AlertDeliveryService {
     private final JdbcTemplate db;
     private final UserAccountRepository users;
     private final TransactionTemplate transactions;
+    private final MessageWebSocketHandler messageSocket;
 
-    public AlertDeliveryService(JdbcTemplate db, UserAccountRepository users, TransactionTemplate transactions) {
-        this.db=db; this.users=users; this.transactions=transactions;
+    public AlertDeliveryService(JdbcTemplate db, UserAccountRepository users, TransactionTemplate transactions,
+                                MessageWebSocketHandler messageSocket) {
+        this.db=db; this.users=users; this.transactions=transactions; this.messageSocket=messageSocket;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -67,6 +70,8 @@ public class AlertDeliveryService {
         String content="【系统自动预警，非人工发送】\n关注账号："+target+"\n来源："+sourceName+"\n时间："+row.get("created_at")+"\n内容："+excerpt+"\n请结合实际情况核实；模型可能误判。";
         db.update("INSERT INTO psy_messages(sender_uid,receiver_uid,gid,content,msg_type,link,sent_time,emotion_notification_id) VALUES (?,?,?,?,?,?,?,?)",
                 sender,String.valueOf(row.get("recipient_uid")),null,content,0,"",String.valueOf(row.get("created_at")),id);
+        Long messageId=db.queryForObject("SELECT id FROM psy_messages WHERE emotion_notification_id=?",Long.class,id);
+        if(messageId!=null) messageSocket.publishAfterCommit(messageId);
     }
 
     private String excerpt(String source,String sourceId,String uid) {

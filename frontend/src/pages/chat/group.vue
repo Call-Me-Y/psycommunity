@@ -247,19 +247,10 @@ export default {
       // 待执行的滚动操作
       pendingScroll: false,
       // 消息更新相关
-      messageUpdateTimer: null,
-      updateInterval: 3000, // 3秒轮询一次
-      backgroundUpdateInterval: 10000, // 后台10秒轮询一次
       isPageVisible: true,
-      isPageFocused: true,
-      lastMessageCount: 0,
       // 请求防重复
       isCheckingNewMessages: false,
-      lastCheckTime: 0,
-      minCheckInterval: 1000, // 最小检查间隔1秒
-      // 发送消息防重复检查
-      lastSendTime: 0,
-      sendCooldownTime: 2000 // 发送消息后2秒内不检查新消息
+      pendingMessageRefresh: false,
     }
   },
   async onLoad(options) {
@@ -273,12 +264,12 @@ export default {
     this.setupFocusListeners()
   },
   onShow() {
+    uni.$off('newMessagesReceived', this.handleRealtimeMessages)
+    uni.$on('newMessagesReceived', this.handleRealtimeMessages)
     // 页面显示时检查是否需要后台更新
     this.checkAndUpdateMessages()
     // 更新已读状态
     this.updateReadStatus()
-    // 启动消息更新定时器
-    this.startMessageUpdateTimer()
     // 设置页面为可见状态
     this.isPageVisible = true
   },
@@ -290,8 +281,7 @@ export default {
       clearTimeout(this.scrollTimer)
       this.scrollTimer = null
     }
-    // 停止消息更新定时器
-    this.stopMessageUpdateTimer()
+    uni.$off('newMessagesReceived', this.handleRealtimeMessages)
     // 移除焦点监听器
     this.removeFocusListeners()
     // 重置所有状态
@@ -299,12 +289,10 @@ export default {
     this.isPageInitialized = false
     this.pendingScroll = false
     this.isPageVisible = false
-    this.isPageFocused = false
   },
   onHide() {
     ChatScroll.remember(this, 'group', this.groupInfo.gid)
-    // 页面隐藏时停止消息更新定时器
-    this.stopMessageUpdateTimer()
+    uni.$off('newMessagesReceived', this.handleRealtimeMessages)
     // 设置页面为不可见状态
     this.isPageVisible = false
   },
@@ -648,55 +636,16 @@ export default {
     },
 
     /**
-     * 启动消息更新定时器
-     */
-    startMessageUpdateTimer() {
-      // 清除现有定时器
-      this.stopMessageUpdateTimer()
-      
-      // 根据页面焦点状态选择更新间隔
-      const interval = this.isPageFocused ? this.updateInterval : this.backgroundUpdateInterval
-      
-      // 设置定时器，定期检查新消息
-      this.messageUpdateTimer = setInterval(() => {
-        if (this.isPageVisible && !this.backgroundUpdateInProgress && this.isPageInitialized) {
-          this.checkForNewMessages()
-        }
-      }, interval)
-    },
-
-    /**
-     * 停止消息更新定时器
-     */
-    stopMessageUpdateTimer() {
-      if (this.messageUpdateTimer) {
-        clearInterval(this.messageUpdateTimer)
-        this.messageUpdateTimer = null
-      }
-    },
-
-    /**
      * 检查新消息
      */
     async checkForNewMessages() {
       // 防重复检查
       if (this.isCheckingNewMessages) {
+        this.pendingMessageRefresh = true
         return
       }
-      
-      // 检查最小间隔
-      const now = Date.now()
-      if (now - this.lastCheckTime < this.minCheckInterval) {
-        return
-      }
-      
-      // 如果刚发送过消息，暂时不检查新消息（避免重复处理自己的消息）
-      if (now - this.lastSendTime < this.sendCooldownTime) {
-        return
-      }
-      
+
       this.isCheckingNewMessages = true
-      this.lastCheckTime = now
       
       try {
         // 记录当前消息数量和最新消息ID
@@ -743,6 +692,19 @@ export default {
         console.error('检查新消息失败:', error)
       } finally {
         this.isCheckingNewMessages = false
+        if (this.pendingMessageRefresh) {
+          this.pendingMessageRefresh = false
+          this.checkForNewMessages()
+        }
+      }
+    },
+
+    handleRealtimeMessages(data) {
+      const messages = data?.messages || []
+      const groupId = String(this.groupInfo.gid || '')
+      if (messages.some(message => message.chat_type === 'group'
+          && String(message.contact_id) === groupId)) {
+        this.checkForNewMessages()
       }
     },
 
@@ -787,14 +749,9 @@ export default {
      */
     handleVisibilityChange() {
       // #ifdef H5
-      this.isPageFocused = !document.hidden
-      if (this.isPageFocused) {
-        // 页面变为可见时，立即检查新消息并重启定时器
+      if (!document.hidden) {
+        // 页面重新可见时补查一次，避免系统挂起 WebSocket 期间漏消息
         this.checkForNewMessages()
-        this.startMessageUpdateTimer()
-      } else {
-        // 页面变为不可见时，降低更新频率
-        this.startMessageUpdateTimer()
       }
       // #endif
     },
@@ -803,19 +760,14 @@ export default {
      * 处理窗口获得焦点
      */
     handleWindowFocus() {
-      this.isPageFocused = true
-      // 立即检查新消息并重启定时器
+      // 窗口重新获得焦点时补查一次
       this.checkForNewMessages()
-      this.startMessageUpdateTimer()
     },
 
     /**
      * 处理窗口失去焦点
      */
     handleWindowBlur() {
-      this.isPageFocused = false
-      // 降低更新频率
-      this.startMessageUpdateTimer()
     },
 
     /**
@@ -913,7 +865,6 @@ export default {
           tempMessage.id = res.message_id
           
           // 记录发送时间，用于防止立即检查新消息
-          this.lastSendTime = Date.now()
           
           // 将新消息添加到缓存
           ChatCache.addGroupMessageToCache(this.groupInfo.gid, tempMessage)

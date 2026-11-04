@@ -21,14 +21,14 @@ export default {
      */
     async initApp() {
       try {
+        // 先订阅登录状态，避免首次登录快于 token 检查而错过实时连接。
+        this.setupMessageListeners()
+
         // 初始化通知管理器
         await notificationManager.init()
         
         // 初始化后台服务
         await backgroundService.init()
-        
-        // 监听新消息事件
-        this.setupMessageListeners()
         
         console.log('应用初始化完成')
       } catch (error) {
@@ -43,6 +43,9 @@ export default {
       // 应用显示时，启动后台服务
       if (backgroundService.getStatus().currentUser) {
         backgroundService.startBackgroundTask()
+      } else {
+        // App 启动时若网络暂不可用，恢复前台后重新检查登录态并连线。
+        backgroundService.refreshCurrentUser()
       }
     },
 
@@ -69,6 +72,18 @@ export default {
       uni.$on('pageShow', () => {
         this.refreshMessageList()
       })
+
+      uni.$on('userAuthenticated', this.handleUserAuthenticated)
+      uni.$on('userLoggedOut', this.handleUserLoggedOut)
+    },
+
+    handleUserAuthenticated() {
+      backgroundService.refreshCurrentUser()
+    },
+
+    handleUserLoggedOut() {
+      backgroundService.currentUser = null
+      backgroundService.stopBackgroundTask()
     },
 
     /**

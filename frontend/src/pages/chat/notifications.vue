@@ -30,12 +30,15 @@ import config from '../../config/api.js'
 import Database from '../../utils/database.js'
 import ChatNavigation from '../../utils/chatNavigation.js'
 export default {
-  data() { return { items: [], modelText: '检查中', isAdmin: false, currentUid: '', refreshTimer: null } },
-  onShow() { this.load(); if (!this.refreshTimer) this.refreshTimer = setInterval(() => this.load(), 15000) },
-  onHide() { this.stopRefresh() },
-  onUnload() { this.stopRefresh() },
+  data() { return { items: [], modelText: '检查中', isAdmin: false, currentUid: '' } },
+  onShow() { uni.$off('newMessagesReceived', this.handleNewMessages); uni.$on('newMessagesReceived', this.handleNewMessages); this.load() },
+  onHide() { uni.$off('newMessagesReceived', this.handleNewMessages) },
+  onUnload() { uni.$off('newMessagesReceived', this.handleNewMessages) },
   methods: {
-    stopRefresh() { if (this.refreshTimer) clearInterval(this.refreshTimer); this.refreshTimer = null },
+    handleNewMessages(data) {
+      const messages = data?.messages || []
+      if (messages.some(message => message.is_auto_alert || message.emotion_notification_id)) this.load()
+    },
     request(path, method='GET') { return new Promise((resolve,reject) => uni.request({
       url: `${config.API_BASE_URL}${path}`, method, header: { Authorization: `Bearer ${Database.getToken()}` },
       success: res => resolve(res.data), fail: reject

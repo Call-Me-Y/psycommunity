@@ -12,11 +12,13 @@ class AuthModule {
   // 设置token
   setToken(token) {
     uni.setStorageSync('jwt_token', token);
+    uni.$emit('userAuthenticated');
   }
 
   // 清除token
   clearToken() {
     uni.removeStorageSync('jwt_token');
+    uni.$emit('userLoggedOut');
   }
 
   // 清除所有用户相关缓存
